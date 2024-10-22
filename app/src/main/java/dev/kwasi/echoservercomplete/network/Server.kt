@@ -167,19 +167,19 @@ class Server(private val iFaceImpl:NetworkMessageInterface) {
 
     private fun getFirstNChars(str: String, n:Int) = str.substring(0,n)
 
-    fun hashStrSha256(str: String): String{
+    private fun hashStrSha256(str: String): String{
         val algorithm = "SHA-256"
         val hashedString = MessageDigest.getInstance(algorithm).digest(str.toByteArray(UTF_8))
         return hashedString.toHex()
     }
 
-    fun generateAESKey(seed: String): SecretKeySpec {
+    private fun generateAESKey(seed: String): SecretKeySpec {
         val first32Chars = getFirstNChars(seed,32)
         val secretKey = SecretKeySpec(first32Chars.toByteArray(), "AES")
         return secretKey
     }
 
-    fun generateIV(seed: String): IvParameterSpec {
+    private fun generateIV(seed: String): IvParameterSpec {
         val first16Chars = getFirstNChars(seed, 16)
         return IvParameterSpec(first16Chars.toByteArray())
     }
