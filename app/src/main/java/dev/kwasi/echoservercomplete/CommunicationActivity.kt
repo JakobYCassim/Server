@@ -28,7 +28,6 @@ import dev.kwasi.echoservercomplete.student.StudentAdapter
 import dev.kwasi.echoservercomplete.student.StudentAdapterInterface
 import dev.kwasi.echoservercomplete.wifidirect.WifiDirectInterface
 import dev.kwasi.echoservercomplete.wifidirect.WifiDirectManager
-import kotlinx.coroutines.selects.select
 
 class CommunicationActivity : AppCompatActivity(), WifiDirectInterface, PeerListAdapterInterface, NetworkMessageInterface, StudentAdapterInterface {
     private var wfdManager: WifiDirectManager? = null
@@ -51,7 +50,7 @@ class CommunicationActivity : AppCompatActivity(), WifiDirectInterface, PeerList
     private lateinit var classInfoText: TextView
     private lateinit var classPasswordtext: TextView
     private lateinit var activeStudentTextView: TextView
-    private  lateinit var selectedStudent: String
+    private var selectedStudent: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -72,7 +71,7 @@ class CommunicationActivity : AppCompatActivity(), WifiDirectInterface, PeerList
         classPasswordtext = findViewById(R.id.classPassword)
         activeStudentTextView = findViewById(R.id.activeStudent)
 
-        chatListAdapter = ChatListAdapter()
+        chatListAdapter = ChatListAdapter(emptyList<ContentModel>().toMutableList())
         val rvChatList: RecyclerView = findViewById(R.id.rvChat)
         rvChatList.adapter = chatListAdapter
         rvChatList.layoutManager = LinearLayoutManager(this)
@@ -97,6 +96,9 @@ class CommunicationActivity : AppCompatActivity(), WifiDirectInterface, PeerList
         }
     }
     fun createGroup(view: View) {
+        activeStudentTextView.text = "Student Chat -"
+        selectedStudent = null
+        chatListAdapter?.updateMessages(emptyList<ContentModel>().toMutableList())
         wfdManager?.createGroup()
     }
 
@@ -129,8 +131,6 @@ class CommunicationActivity : AppCompatActivity(), WifiDirectInterface, PeerList
         val wfdNoConnectionView:ConstraintLayout = findViewById(R.id.clNoWifiDirectConnection)
         wfdNoConnectionView.visibility = if (wfdAdapterEnabled && !wfdHasConnection) View.VISIBLE else View.GONE
 
-        //val rvPeerList: RecyclerView= findViewById(R.id.rvPeerListing)
-        //rvPeerList.visibility = if (wfdAdapterEnabled && !wfdHasConnection && hasDevices) View.VISIBLE else View.GONE
 
         val wfdConnectedView = findViewById<View>(R.id.clHasConnection)
         wfdConnectedView.visibility = if(wfdHasConnection)View.VISIBLE else View.GONE
@@ -146,8 +146,8 @@ class CommunicationActivity : AppCompatActivity(), WifiDirectInterface, PeerList
         etMessage.text.clear()
 
         if (server != null) {
-            if (::selectedStudent.isInitialized) {
-                server?.sendMessage(content, selectedStudent)
+            if (selectedStudent!=null) {
+                server?.sendMessage(content, selectedStudent!!)
                 chatListAdapter?.addItemToEnd(content)
             }
             else {
@@ -211,9 +211,13 @@ class CommunicationActivity : AppCompatActivity(), WifiDirectInterface, PeerList
     }
 
 
-    override fun onContent(content: ContentModel) {
-        runOnUiThread{
-            chatListAdapter?.addItemToEnd(content)
+    override fun onContent(content: ContentModel, studentId: String) {
+        if(selectedStudent!=null) {
+            if (studentId == selectedStudent) {
+                runOnUiThread {
+                    chatListAdapter?.addItemToEnd(content)
+                }
+            }
         }
     }
 
@@ -228,13 +232,21 @@ class CommunicationActivity : AppCompatActivity(), WifiDirectInterface, PeerList
 
     @SuppressLint("SetTextI18n")
     override fun onStudentClicked(studentId: String) {
-        selectedStudent = studentId
+        if (selectedStudent != null) {
+            if (selectedStudent != studentId) {
+                runOnUiThread {
+                    chatListAdapter?.updateMessages(server?.getStudentMessages(studentId))
+                }
+            }
+        } else {
+
+            selectedStudent = studentId
+            runOnUiThread {
+                chatListAdapter?.updateMessages(server?.getStudentMessages(studentId))
+            }
+
+        }
         activeStudentTextView.text = "Student Chat - $selectedStudent"
-       // val messageList = server?.studentMessages?.get(studentId)
-      //  if (messageList !=null) {
-        //    runOnUiThread { chatAdapter.updateMessages(messageList) }
-        //}
-   // }
     }
 
 }

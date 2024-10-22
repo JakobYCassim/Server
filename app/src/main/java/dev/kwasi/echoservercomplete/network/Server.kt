@@ -3,6 +3,7 @@ package dev.kwasi.echoservercomplete.network
 import android.util.Log
 import com.google.gson.Gson
 import dev.kwasi.echoservercomplete.models.ContentModel
+import java.io.IOException
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
@@ -29,6 +30,7 @@ class Server(private val iFaceImpl:NetworkMessageInterface) {
 
     private lateinit var svrSocket: ServerSocket
     private val clientMap: HashMap<String, Socket> = HashMap()
+    private val studentMessages: HashMap<String, MutableList<ContentModel>> = HashMap()
     private var serverThread : Thread? = null
     private var handleThread: Thread? = null
     @Volatile
@@ -36,7 +38,7 @@ class Server(private val iFaceImpl:NetworkMessageInterface) {
     var isClosed = true
 
     init {
-       // studentMessages.clear()
+        studentMessages.clear()
         startServer()
     }
     private fun startServer() {
@@ -80,6 +82,7 @@ class Server(private val iFaceImpl:NetworkMessageInterface) {
                     return
                 }
                 clientMap[clientId] = socket
+                studentMessages[clientId] = emptyList<ContentModel>().toMutableList()
                 iFaceImpl.onStudentsUpdated(clientMap.keys.toList())
                 iFaceImpl.onStudentConnected(socket.inetAddress?.hostAddress.toString())
                 Log.e("SERVER", "A new connection has been detected!")
@@ -131,7 +134,7 @@ class Server(private val iFaceImpl:NetworkMessageInterface) {
             val challenge = Gson().toJson(rContent)
             writer.write("$challenge\n")
             writer.flush()
-            val clientResponse = reader.readLine()
+            val clientResponse = reader.readLine() ?: throw IOException("No response from client")
             val clientResponseStr = Gson().fromJson(clientResponse, ContentModel::class.java)
             val decryptResponse = decryptMessage(clientResponseStr.message, aesKey, aesIv )
             if(decryptResponse.toInt() == R) {
@@ -156,6 +159,7 @@ class Server(private val iFaceImpl:NetworkMessageInterface) {
             val contentAsStr:String = Gson().toJson(encryptedContent)
             writer?.write("$contentAsStr\n")
             writer?.flush()
+            studentMessages[studentId]?.add(content)
         }
     }
 
@@ -171,7 +175,8 @@ class Server(private val iFaceImpl:NetworkMessageInterface) {
                     Log.e("Server", "Received: $receivedMessage")
                     val messageContent =Gson().fromJson(receivedMessage, ContentModel::class.java)
                     val decryptedMessage = decryptMessage(messageContent.message, aesKey, aesIv)
-                    iFaceImpl.onContent(ContentModel(decryptedMessage, messageContent.senderIp))
+                    studentMessages[studentId]?.add(ContentModel(decryptedMessage, messageContent.senderIp))
+                    iFaceImpl.onContent(ContentModel(decryptedMessage, messageContent.senderIp), studentId)
                 }
             }
         } catch (e: Exception) {
@@ -193,8 +198,13 @@ class Server(private val iFaceImpl:NetworkMessageInterface) {
             }
             svrSocket.close()
             clientMap.clear()
+            studentMessages.clear()
             isClosed = true
         }
+    }
+
+    fun getStudentMessages(studentId: String) : MutableList<ContentModel>? {
+        return studentMessages[studentId]
     }
 
     private fun ByteArray.toHex() = joinToString(separator = "") { byte -> "%02x".format(byte) }

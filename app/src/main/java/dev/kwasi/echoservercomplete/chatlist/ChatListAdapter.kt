@@ -1,21 +1,17 @@
 package dev.kwasi.echoservercomplete.chatlist
 
-import android.annotation.SuppressLint
-import android.net.wifi.p2p.WifiP2pDevice
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.RelativeLayout
 import android.widget.TextView
-import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.recyclerview.widget.RecyclerView
 import dev.kwasi.echoservercomplete.R
 import dev.kwasi.echoservercomplete.models.ContentModel
-import dev.kwasi.echoservercomplete.peerlist.PeerListAdapter
 
-class ChatListAdapter : RecyclerView.Adapter<ChatListAdapter.ViewHolder>(){
-    private val chatList:MutableList<ContentModel> = mutableListOf()
+class ChatListAdapter(private var chatList: MutableList<ContentModel>) : RecyclerView.Adapter<ChatListAdapter.ViewHolder>(){
+
 
     class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         val messageView: TextView = itemView.findViewById(R.id.messageTextView)
@@ -40,5 +36,14 @@ class ChatListAdapter : RecyclerView.Adapter<ChatListAdapter.ViewHolder>(){
     fun addItemToEnd(contentModel: ContentModel){
         chatList.add(contentModel)
         notifyItemInserted(chatList.size)
+    }
+
+    fun updateMessages(newStudentMessages: MutableList<ContentModel>?){
+        chatList.clear()
+
+        if (newStudentMessages != null) {
+            chatList.addAll(newStudentMessages)
+        }
+        notifyDataSetChanged()
     }
 }
