@@ -6,8 +6,16 @@ import dev.kwasi.echoservercomplete.models.ContentModel
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
+import java.security.MessageDigest
+import javax.crypto.Cipher
+import javax.crypto.SecretKey
+import javax.crypto.spec.IvParameterSpec
+import javax.crypto.spec.SecretKeySpec
 import kotlin.Exception
 import kotlin.concurrent.thread
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
+import kotlin.text.Charsets.UTF_8
 
 /// The [Server] class has all the functionality that is responsible for the 'server' connection.
 /// This is implemented using TCP. This Server class is intended to be run on the GO.
@@ -73,7 +81,7 @@ class Server(private val iFaceImpl:NetworkMessageInterface) {
 
                     while(!socket.isClosed){
                         try{
-                            listenForMessages(socket)
+                            listenForMessages(socket, clientId)
                         } catch (e: Exception){
                             Log.e("SERVER", "An error has occurred with the client $it")
                             e.printStackTrace()
@@ -108,21 +116,28 @@ class Server(private val iFaceImpl:NetworkMessageInterface) {
     fun sendMessage(content: ContentModel, studentId: String){
         thread{
             val writer = clientMap[studentId]?.getOutputStream()?.bufferedWriter()
-            val contentAsStr:String = Gson().toJson(content)
+            val seed = hashStrSha256(studentId)
+            val encryptContent = encryptMessage(content.message, generateAESKey(seed), generateIV(seed))
+            val encryptedContent = ContentModel(encryptContent, content.senderIp)
+            val contentAsStr:String = Gson().toJson(encryptedContent)
             writer?.write("$contentAsStr\n")
             writer?.flush()
         }
     }
 
-    private fun listenForMessages(clientSocket: Socket) {
+    private fun listenForMessages(clientSocket: Socket, studentId: String) {
         val reader = clientSocket.getInputStream().bufferedReader()
+        val hashKey = hashStrSha256(studentId)
+        val aesKey = generateAESKey(hashKey)
+        val aesIv = generateIV(hashKey)
         try {
             while (!clientSocket.isClosed && isRunning) {
                 val receivedMessage = reader.readLine()
                 if (receivedMessage != null) {
                     Log.e("Server", "Received: $receivedMessage")
-                    val message =Gson().fromJson(receivedMessage, ContentModel::class.java)
-                    iFaceImpl.onContent(message)
+                    val messageContent =Gson().fromJson(receivedMessage, ContentModel::class.java)
+                    val decryptedMessage = decryptMessage(messageContent.message, aesKey, aesIv)
+                    iFaceImpl.onContent(ContentModel(decryptedMessage, messageContent.senderIp))
                 }
             }
         } catch (e: Exception) {
@@ -148,4 +163,48 @@ class Server(private val iFaceImpl:NetworkMessageInterface) {
         }
     }
 
+    private fun ByteArray.toHex() = joinToString(separator = "") { byte -> "%02x".format(byte) }
+
+    private fun getFirstNChars(str: String, n:Int) = str.substring(0,n)
+
+    fun hashStrSha256(str: String): String{
+        val algorithm = "SHA-256"
+        val hashedString = MessageDigest.getInstance(algorithm).digest(str.toByteArray(UTF_8))
+        return hashedString.toHex()
+    }
+
+    fun generateAESKey(seed: String): SecretKeySpec {
+        val first32Chars = getFirstNChars(seed,32)
+        val secretKey = SecretKeySpec(first32Chars.toByteArray(), "AES")
+        return secretKey
+    }
+
+    fun generateIV(seed: String): IvParameterSpec {
+        val first16Chars = getFirstNChars(seed, 16)
+        return IvParameterSpec(first16Chars.toByteArray())
+    }
+
+    @OptIn(ExperimentalEncodingApi::class)
+    fun encryptMessage(plaintext: String, aesKey: SecretKey, aesIv: IvParameterSpec):String{
+        val plainTextByteArr = plaintext.toByteArray()
+
+        val cipher = Cipher.getInstance("AES/CBC/PKCS5PADDING")
+        cipher.init(Cipher.ENCRYPT_MODE, aesKey, aesIv)
+
+        val encrypt = cipher.doFinal(plainTextByteArr)
+        return Base64.Default.encode(encrypt)
+    }
+
+    @OptIn(ExperimentalEncodingApi::class)
+    fun decryptMessage(encryptedText: String, aesKey:SecretKey, aesIv: IvParameterSpec):String{
+        val textToDecrypt = Base64.Default.decode(encryptedText)
+
+        val cipher = Cipher.getInstance("AES/CBC/PKCS5PADDING")
+
+        cipher.init(Cipher.DECRYPT_MODE, aesKey,aesIv)
+
+        val decrypt = cipher.doFinal(textToDecrypt)
+        return String(decrypt)
+
+    }
 }
