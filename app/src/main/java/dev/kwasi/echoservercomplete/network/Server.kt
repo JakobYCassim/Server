@@ -15,6 +15,7 @@ import kotlin.Exception
 import kotlin.concurrent.thread
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
+import kotlin.random.Random
 import kotlin.text.Charsets.UTF_8
 
 /// The [Server] class has all the functionality that is responsible for the 'server' connection.
@@ -73,6 +74,11 @@ class Server(private val iFaceImpl:NetworkMessageInterface) {
 
             val clientId = handshake(socket)
             if(clientId != null) {
+                val eVerified = encryptionChallenge(socket, clientId)
+                if(!eVerified){
+                    socket.close()
+                    return
+                }
                 clientMap[clientId] = socket
                 iFaceImpl.onStudentsUpdated(clientMap.keys.toList())
                 iFaceImpl.onStudentConnected(socket.inetAddress?.hostAddress.toString())
@@ -112,6 +118,34 @@ class Server(private val iFaceImpl:NetworkMessageInterface) {
             null
         }
     }
+
+    private fun encryptionChallenge(socket: Socket, studentId: String) : Boolean{
+        val hashKey = hashStrSha256(studentId)
+        val aesKey = generateAESKey(hashKey)
+        val aesIv = generateIV(hashKey)
+        return try{
+            val writer = socket.getOutputStream().bufferedWriter()
+            val reader = socket.getInputStream().bufferedReader()
+            val R = Random.nextInt(0, 100)
+            val rContent = ContentModel("$R","192.168.49.1" )
+            val challenge = Gson().toJson(rContent)
+            writer.write("$challenge\n")
+            writer.flush()
+            val clientResponse = reader.readLine()
+            val clientResponseStr = Gson().fromJson(clientResponse, ContentModel::class.java)
+            val decryptResponse = decryptMessage(clientResponseStr.message, aesKey, aesIv )
+            if(decryptResponse.toInt() == R) {
+                true
+            }else {
+                Log.e("SERVER", "Decryption incorrect")
+                false
+            }
+        }catch (e: Exception) {
+            Log.e("SERVER", "Challenge Protocol Failed ${e.message}")
+            false
+        }
+    }
+
 
     fun sendMessage(content: ContentModel, studentId: String){
         thread{
