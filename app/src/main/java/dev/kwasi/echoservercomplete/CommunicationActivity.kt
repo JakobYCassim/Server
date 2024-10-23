@@ -191,6 +191,7 @@ class CommunicationActivity : AppCompatActivity(), WifiDirectInterface, PeerList
         wfdHasConnection = groupInfo != null
         if (groupInfo == null) {
             server?.close()
+            updateUI()
             Log.d("SERVER", "server status running :${server!=null}")
         } else if (groupInfo.isGroupOwner && (server == null || server!!.isClosed)) {
             Log.d("SERVER", "groupInfo $groupInfo, server status running :${server!=null}")

@@ -62,6 +62,9 @@ class Server(private val iFaceImpl:NetworkMessageInterface) {
                         handleSocket(studentSocket)
                     } catch (e: Exception) {
                         Log.e("SERVER", "An error has occurred in the server ${e.message}! and is running is $isRunning")
+                        if(svrSocket.isClosed){
+                            isRunning = false
+                        }
                     }
                 }
             } catch (e: Exception) {
